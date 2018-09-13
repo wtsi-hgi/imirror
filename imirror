@@ -30,6 +30,12 @@ usage() {
 	EOF
 }
 
+strip_prefix() {
+  local prefix="$1"
+  local data="$2"
+  echo "${data#${prefix}}"
+}
+
 main() {
   local mode="$1"
 
@@ -37,12 +43,6 @@ main() {
     "__setup")
       local source_dir="$1"
       local dest_coll="$2"
-
-      strip_prefix() {
-        # Strip the source directory prefixed to source files
-        local data="$1"
-        echo "${data#${source_dir}/}"
-      }
 
       get_manifest() {
         # Find files of a given type in the source directory, excluding
@@ -67,7 +67,7 @@ main() {
       local subdir
       local subcoll
       while IFS= read -r subdir; do
-        subcoll="${dest_coll}/$(strip_prefix "${subdir}")"
+        subcoll="${dest_coll}/$(strip_prefix "${source_dir}/" "${subdir}")"
         imkdir -p "${subcoll}"
       done < "${manifest_dir}/dirs"
 
