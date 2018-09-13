@@ -60,7 +60,7 @@ main() {
       local manifest_dir="${source_dir}/.imirror/manifest"
       mkdir -p "${manifest_dir}"
       get_manifest d > "${manifest_dir}/dirs"
-      get_manifest f | split -dn "r/${BSUB_LIMIT}" - "${manifest_dir}/files."
+      get_manifest f | split -da4 -n "r/${BSUB_LIMIT}" - "${manifest_dir}/files."
 
       # Create subcollections
       echo "Mirroring directory structure on iRODS..."
@@ -71,11 +71,20 @@ main() {
         imkdir -p "${subcoll}"
       done < "${manifest_dir}/dirs"
 
-      # TODO Distributed iput job
+      echo "Submitting distributed copy jobs..."
+      local log_dir="${source_dir}/.imirror/logs"
+      bsub -q normal \
+           -G hgi \
+           -M 1000 \
+           -R "select[mem>1000] rusage[mem=1000]" \
+           -J "imirror${RANDOM}[1-${BSUB_LIMIT}%${IPUT_LIMIT}]" \
+           -o "${log_dir}/copy.%I.log" -e "${log_dir}/copy.%I.log" \
+           "${BINARY}" __copy "${source_dir}" "${dest_coll}"
       ;;
 
     "__copy")
-      # TODO
+      local source_dir="$1"
+      local dest_coll="$2"
       ;;
 
     *)
