@@ -9,10 +9,10 @@ BINARY="$(readlink -fn "$0")"
 PROGNAME="$(basename "${BINARY}")"
 
 # Maximum number of concurrent iputs
-IPUT_LIMIT="${IPUT_LIMIT-30}"
+export IPUT_LIMIT="${IPUT_LIMIT-30}"
 
 # Maximum number of elements in job array
-BSUB_LIMIT="${BSUB_LIMIT-1000}"
+export BSUB_LIMIT="${BSUB_LIMIT-300}"
 
 stderr() {
   local message="$*"
@@ -38,16 +38,38 @@ main() {
       local source_dir="$1"
       local dest_coll="$2"
 
+      strip_prefix() {
+        # Strip the source directory prefixed to source files
+        local data="$1"
+        echo "${data#${source_dir}/}"
+      }
+
+      get_manifest() {
+        # Find files of a given type in the source directory, excluding
+        # the .imirror directory we created for keeping state
+        # FIXME This will break horribly for files with \n in their names
+        local type="$1"
+        find "${source_dir}" \
+             -mindepth 1 \
+             -path "${source_dir}/.imirror" -prune \
+             -o -type "${type}" -print
+      }
+
       # Generate manifest
       echo "Generating manifest..."
-      local manifest="$(mktemp -d)"
-      find "${source_dir}" -type d > "${manifest}/dirs"
-      find "${source_dir}" -type f | split -dn "r/${BSUB_LIMIT}" - "${manifest}/files."
-      mv "${manifest}" "${source_dir}/.imirror/manifest"
+      local manifest_dir="${source_dir}/.imirror/manifest"
+      mkdir -p "${manifest_dir}"
+      get_manifest d > "${manifest_dir}/dirs"
+      get_manifest f | split -dn "r/${BSUB_LIMIT}" - "${manifest_dir}/files."
 
       # Create subcollections
       echo "Mirroring directory structure on iRODS..."
-      # TODO
+      local subdir
+      local subcoll
+      while IFS= read -r subdir; do
+        subcoll="${dest_coll}/$(strip_prefix "${subdir}")"
+        imkdir -p "${subcoll}"
+      done < "${manifest_dir}/dirs"
 
       # TODO Distributed iput job
       ;;
@@ -72,11 +94,18 @@ main() {
         exit 1
       fi
 
-      # TODO Check destination collection exists...
+      # TODO Check destination collection exists...somehow
 
-      mkdir -p "${source_dir}/.imirror/logs"
-
-      # TODO Setup job
+      echo "Submitting job..."
+      local log_dir="${source_dir}/.imirror/logs"
+      mkdir -p "${log_dir}"
+      bsub -q normal \
+           -G hgi \
+           -M 1000 \
+           -R "select[mem>1000] rusage[mem=1000]" \
+           -o "${log_dir}/setup.log" -e "${log_dir}/setup.log" \
+           -env IPUT_LIMIT,BSUB_LIMIT \
+           "${BINARY}" __setup "${source_dir}" "${dest_coll}"
       ;;
   esac
 }
