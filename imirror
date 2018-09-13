@@ -85,6 +85,20 @@ main() {
     "__copy")
       local source_dir="$1"
       local dest_coll="$2"
+
+      local -i manifest_id="$(( LSB_JOBINDEX - 1 ))"
+      local manifest="$(printf "${source_dir}/.imirror/manifest/files.%04d" "${manifest_id}")"
+
+      echo "Beginning file copy..."
+      local source_file
+      local dest_file
+      while IFS= read -r source_file; do
+        dest_file="${dest_coll}/$(strip_prefix "${source_dir}/" "${source_file}")"
+        echo "Uploading ${source_file} to ${dest_file}"
+        iput -K "${source_file}" "${dest_file}"
+      done < "${manifest}"
+
+      echo "Done"
       ;;
 
     *)
