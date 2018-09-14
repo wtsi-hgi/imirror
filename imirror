@@ -73,7 +73,7 @@ main() {
       local subcoll
       while IFS= read -r subdir; do
         subcoll="${dest_coll}/$(strip_prefix "${source_dir}/" "${subdir}")"
-        imkdir -p "${subcoll}"
+        /opt/renci/icommands/bin/imkdir -p "${subcoll}"
       done < "${manifest_dir}/dirs"
 
       echo "Submitting distributed copy jobs..."
@@ -101,7 +101,7 @@ main() {
       while IFS= read -r source_file; do
         dest_file="${dest_coll}/$(strip_prefix "${source_dir}/" "${source_file}")"
         echo "Uploading ${source_file} to ${dest_file}"
-        iput -K "${source_file}" "${dest_file}"
+        /opt/renci/icommands/bin/iput -K "${source_file}" "${dest_file}"
       done < "${manifest}"
 
       echo "Done"
