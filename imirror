@@ -41,8 +41,8 @@ main() {
 
   case "${mode}" in
     "__setup")
-      local source_dir="$1"
-      local dest_coll="$2"
+      local source_dir="$2"
+      local dest_coll="$3"
 
       get_manifest() {
         # Find files of a given type in the source directory, excluding
@@ -83,8 +83,8 @@ main() {
       ;;
 
     "__copy")
-      local source_dir="$1"
-      local dest_coll="$2"
+      local source_dir="$2"
+      local dest_coll="$3"
 
       local -i manifest_id="$(( LSB_JOBINDEX - 1 ))"
       local manifest="$(printf "${source_dir}/.imirror/manifest/files.%04d" "${manifest_id}")"
