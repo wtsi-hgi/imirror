@@ -40,6 +40,11 @@ main() {
   local mode="$1"
 
   case "${mode}" in
+    "__icheck")
+      command -v imkdir
+      command -v iput
+      ;;
+
     "__setup")
       local source_dir="$2"
       local dest_coll="$3"
@@ -79,6 +84,7 @@ main() {
            -R "select[mem>1000] rusage[mem=1000]" \
            -J "imirror${RANDOM}[1-${BSUB_LIMIT}%${IPUT_LIMIT}]" \
            -o "${log_dir}/copy.%I.log" -e "${log_dir}/copy.%I.log" \
+           -E "${BINARY} __icheck" \
            "${BINARY}" __copy "${source_dir}" "${dest_coll}"
       ;;
 
@@ -128,6 +134,7 @@ main() {
            -R "select[mem>1000] rusage[mem=1000]" \
            -o "${log_dir}/setup.log" -e "${log_dir}/setup.log" \
            -env IPUT_LIMIT,BSUB_LIMIT \
+           -E "${BINARY} __icheck" \
            "${BINARY}" __setup "${source_dir}" "${dest_coll}"
       ;;
   esac
