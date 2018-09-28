@@ -26,7 +26,7 @@ stderr() {
 
 usage() {
   cat <<-EOF
-	Usage: ${PROGNAME} /your/source/directory /the/irods/collection
+	Usage: ${PROGNAME} /your/source/directory /target/irods/collection
 	EOF
 }
 
@@ -40,11 +40,6 @@ main() {
   local mode="$1"
 
   case "${mode}" in
-    "__icheck")
-      command -v imkdir
-      command -v iput
-      ;;
-
     "__setup")
       local source_dir="$2"
       local dest_coll="$3"
@@ -73,7 +68,7 @@ main() {
       local subcoll
       while IFS= read -r subdir; do
         subcoll="${dest_coll}/$(strip_prefix "${source_dir}/" "${subdir}")"
-        /opt/renci/icommands/bin/imkdir -p "${subcoll}"
+        imkdir -p "${subcoll}"
       done < "${manifest_dir}/dirs"
 
       echo "Submitting distributed copy jobs..."
@@ -84,7 +79,6 @@ main() {
            -R "select[mem>1000] rusage[mem=1000]" \
            -J "imirror${RANDOM}[1-${BSUB_LIMIT}%${IPUT_LIMIT}]" \
            -o "${log_dir}/copy.%I.log" -e "${log_dir}/copy.%I.log" \
-           -E "${BINARY} __icheck" \
            "${BINARY}" __copy "${source_dir}" "${dest_coll}"
       ;;
 
@@ -101,7 +95,7 @@ main() {
       while IFS= read -r source_file; do
         dest_file="${dest_coll}/$(strip_prefix "${source_dir}/" "${source_file}")"
         echo "Uploading ${source_file} to ${dest_file}"
-        /opt/renci/icommands/bin/iput -K "${source_file}" "${dest_file}"
+        iput -K "${source_file}" "${dest_file}"
       done < "${manifest}"
 
       echo "Done"
@@ -123,7 +117,7 @@ main() {
         exit 1
       fi
 
-      # TODO Check destination collection exists...somehow
+      # TODO Feature: Check destination collection exists...somehow
 
       echo "Submitting job..."
       local log_dir="${source_dir}/.imirror/logs"
@@ -133,8 +127,6 @@ main() {
            -M 1000 \
            -R "select[mem>1000] rusage[mem=1000]" \
            -o "${log_dir}/setup.log" -e "${log_dir}/setup.log" \
-           -env IPUT_LIMIT,BSUB_LIMIT \
-           -E "${BINARY} __icheck" \
            "${BINARY}" __setup "${source_dir}" "${dest_coll}"
       ;;
   esac
