@@ -77,7 +77,7 @@ main() {
            -G hgi \
            -M 1000 \
            -R "select[mem>1000] rusage[mem=1000]" \
-           -J "imirror${RANDOM}[1-${BSUB_LIMIT}%${IPUT_LIMIT}]" \
+           -J "imirror${RANDOM}[1-${BSUB_LIMIT}]%${IPUT_LIMIT}" \
            -o "${log_dir}/copy.%I.log" -e "${log_dir}/copy.%I.log" \
            "${BINARY}" __copy "${source_dir}" "${dest_coll}"
       ;;
