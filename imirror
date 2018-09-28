@@ -119,6 +119,11 @@ main() {
 
       # TODO Feature: Check destination collection exists...somehow
 
+      if [[ -d "${source_dir}/.imirror" ]]; then
+        stderr ".imirror directory already exists at source; delete this and try again!"
+        exit 1
+      fi
+
       echo "Submitting job..."
       local log_dir="${source_dir}/.imirror/logs"
       mkdir -p "${log_dir}"
