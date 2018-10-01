@@ -95,7 +95,7 @@ main() {
       while IFS= read -r source_file; do
         dest_file="${dest_coll}/$(strip_prefix "${source_dir}/" "${source_file}")"
         echo "Uploading ${source_file} to ${dest_file}"
-        iput -K "${source_file}" "${dest_file}"
+        iput -fK "${source_file}" "${dest_file}"
       done < "${manifest}"
 
       echo "Done"
