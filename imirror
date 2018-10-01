@@ -9,10 +9,10 @@ BINARY="$(readlink -fn "$0")"
 PROGNAME="$(basename "${BINARY}")"
 
 # Maximum number of concurrent iputs
-export IPUT_LIMIT="${IPUT_LIMIT-30}"
+export IPUT_LIMIT="${IPUT_LIMIT-15}"
 
 # Maximum number of elements in job array
-export BSUB_LIMIT="${BSUB_LIMIT-300}"
+export BSUB_LIMIT="${BSUB_LIMIT-200}"
 
 stderr() {
   local message="$*"
