@@ -9,7 +9,7 @@ BINARY="$(readlink -fn "$0")"
 PROGNAME="$(basename "${BINARY}")"
 
 # Maximum number of concurrent iputs
-export IPUT_LIMIT="${IPUT_LIMIT-15}"
+export IPUT_LIMIT="${IPUT_LIMIT-10}"
 
 # Maximum number of elements in job array
 export BSUB_LIMIT="${BSUB_LIMIT-200}"
@@ -92,10 +92,15 @@ main() {
       echo "Beginning file copy..."
       local source_file
       local dest_file
+      local restart_info
       while IFS= read -r source_file; do
+        restart_info="$(mktemp -d)"
         dest_file="${dest_coll}/$(strip_prefix "${source_dir}/" "${source_file}")"
         echo "Uploading ${source_file} to ${dest_file}"
-        iput -fK "${source_file}" "${dest_file}"
+        iput -fKT --wlock --retries 3 \
+             -X "${restart_info}/restart" \
+             --lfrestart "${restart_info}/lfrestart" \
+             "${source_file}" "${dest_file}"
       done < "${manifest}"
 
       echo "Done"
