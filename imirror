@@ -101,6 +101,7 @@ main() {
              -X "${restart_info}/restart" \
              --lfrestart "${restart_info}/lfrestart" \
              "${source_file}" "${dest_file}"
+        rm -rf "${restart_info}"
       done < "${manifest}"
 
       echo "Done"
