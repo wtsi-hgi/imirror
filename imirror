@@ -20,8 +20,8 @@
 
 set -euo pipefail
 
-BINARY="$(readlink -fn "$0")"
-PROGNAME="$(basename "${BINARY}")"
+readonly BINARY="$(readlink -fn "$0")"
+readonly PROGNAME="$(basename "${BINARY}")"
 
 # Maximum number of concurrent iputs
 export IPUT_LIMIT="${IPUT_LIMIT-10}"
@@ -29,19 +29,50 @@ export IPUT_LIMIT="${IPUT_LIMIT-10}"
 # Maximum number of elements in job array
 export ELEMENTS="${ELEMENTS-200}"
 
+readonly -A ANSI=(
+  [reset]="$(tput sgr0)"
+  [red]="$(tput setaf 1)"
+  [bold]="$(tput bold)"
+)
+
 stderr() {
   local message="$*"
 
   if [[ -t 2 ]]; then
-    message="\033[0;31m${message}\033[0m"
+    message="${ANSI[red]}${message}${ANSI[reset]}"
   fi
 
-  >&2 echo -e "${message}"
+  >&2 echo "${message}"
 }
 
 usage() {
+  local indent="$(printf "%*s" ${#PROGNAME})"
+  local usage="Usage"
+
+  if [[ -t 1 ]]; then
+    usage="${ANSI[bold]}${usage}${ANSI[reset]}"
+  fi
+
   cat <<-EOF
-	Usage: ${PROGNAME} /your/source/directory /target/irods/collection
+	${usage}  ${PROGNAME} [--find FIND_OPTIONS...]
+	       ${indent} [--lsf LSF_OPTIONS...]
+	       ${indent} SOURCE TARGET
+	
+	Mirror a directory on a POSIX filesystem into an iRODS collection,
+	distributing the upload over an LSF cluster.
+	
+	  --find FIND_OPTIONS...  Optional arguments passed to find(1)
+	  --lsf LSF_OPTIONS...    Optional arguments passed to LSF submission
+	  SOURCE                  POSIX directory to source
+	  TARGET                  iRODS collection to target
+	
+	${usage}  ${PROGNAME} --progress [SOURCE]
+	
+	Report on the progress of a previous invocation.
+	
+	  --progress [SOURCE]     POSIX source directory
+	
+	The current working directory is used, if the SOURCE is not specified.
 	EOF
 }
 
