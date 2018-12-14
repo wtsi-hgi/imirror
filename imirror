@@ -1,7 +1,22 @@
 #!/usr/bin/env bash
 
-# Distributed copy of a directory into an iRODS collection
-# Christopher Harrison <ch12@sanger.ac.uk>
+# imirror
+#
+# Author: Christopher Harrison <ch12@sanger.ac.uk>
+# Copyright (c) 2018 Genome Research Ltd.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+#
+# This program is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+# General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 set -euo pipefail
 
@@ -12,7 +27,7 @@ PROGNAME="$(basename "${BINARY}")"
 export IPUT_LIMIT="${IPUT_LIMIT-10}"
 
 # Maximum number of elements in job array
-export BSUB_LIMIT="${BSUB_LIMIT-200}"
+export ELEMENTS="${ELEMENTS-200}"
 
 stderr() {
   local message="$*"
@@ -60,7 +75,7 @@ main() {
       local manifest_dir="${source_dir}/.imirror/manifest"
       mkdir -p "${manifest_dir}"
       get_manifest d > "${manifest_dir}/dirs"
-      get_manifest f | split -da4 -n "r/${BSUB_LIMIT}" - "${manifest_dir}/files."
+      get_manifest f | split -da4 -n "r/${ELEMENTS}" - "${manifest_dir}/files."
 
       # Create subcollections
       echo "Mirroring directory structure on iRODS..."
@@ -77,7 +92,7 @@ main() {
            -G hgi \
            -M 1000 \
            -R "select[mem>1000] rusage[mem=1000]" \
-           -J "imirror${RANDOM}[1-${BSUB_LIMIT}]%${IPUT_LIMIT}" \
+           -J "imirror${RANDOM}[1-${ELEMENTS}]%${IPUT_LIMIT}" \
            -o "${log_dir}/copy.%I.log" -e "${log_dir}/copy.%I.log" \
            "${BINARY}" __copy "${source_dir}" "${dest_coll}"
       ;;
