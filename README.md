@@ -5,7 +5,9 @@ distributing the upload over an LSF cluster.
 
 ## Usage
 
-    imirror [--find FIND_OPTIONS...] [--lsf LSF_OPTIONS...] SOURCE TARGET
+    imirror [--find FIND_OPTIONS...] [--bsub BSUB_OPTIONS...]
+            [--iput IPUT_OPTIONS...] SOURCE TARGET
+
     imirror --progress [SOURCE]
 
 ### Invocation
@@ -13,7 +15,8 @@ distributing the upload over an LSF cluster.
 | Option                   | Description                               |
 | :----------------------- | :---------------------------------------- |
 | `--find FIND_OPTIONS...` | Optional arguments given to `find`(1), to determine which files will be copied |
-| `--lsf LSF_OPTIONS...`   | Optional arguments given to the LSF job submission (`bsub`) |
+| `--bsub BSUB_OPTIONS...` | Optional arguments given to the LSF job submission (`bsub`) |
+| `--iput IPUT_OPTIONS...` | Optional arguments given to the iRODS upload (`iput`) |
 | `SOURCE`                 | POSIX directory to source                 |
 | `TARGET`                 | iRODS collection to target                |
 
@@ -29,21 +32,34 @@ refined using the `--find` declaration. For example:
     imirror --find -name "*.tar.gz" -o -name "*.tgz" /source/directory /target/collection
 
 The cluster distribution uses the `bsub` defaults, which can be
-fine-tuned using the `--lsf` declaration. For example:
+fine-tuned using the `--bsub` declaration. For example:
 
-    imirror --lsf -G my_project -q long /source/directory /target/collection
+    imirror --bsub -G my_project -q long /source/directory /target/collection
 
 **Note** You should not attempt to set the `-J` (job name), `-o`
-(standard output logging), `-e` (standard error logging) or `-w` (job
-dependency expression) options to `bsub`, as these are used internally.
-Setting these in the `--lsf` declaration may cause unindented
-consequences.
+(standard output logging) or `-e` (standard error logging) options to
+`bsub`, as these are used internally. Setting these in the `--bsub`
+declaration may cause unindented consequences.
 
 **Hint** As well as the usual queue, user/group and resource requirement
-parameters, the `--lsf` declaration could be used to do iRODS Kerberos
+parameters, the `--bsub` declaration could be used to do iRODS Kerberos
 authentication in a pre-execution command (i.e., using the `-E` option
 to `bsub`). There is no internal parsing of the declarations (hence the
 above warning), so anything goes.
+
+To fine-tune the behaviour of the iRODS upload (`iput`), you may use the
+`--iput` declaration. Note, however, that the default invocation is
+already tuned for resilience in the following ways:
+
+* Client and server-side checksum validation;
+* Retrying (up to three times), with restart information for small and
+  large files;
+* Socket keepalive;
+* Exclusive write locking.
+
+There are very few options to `iput` that are still relevant (e.g.,
+ticket-based access with `-t`), but they can be specified here if needs
+be.
 
 ### Tracking
 
