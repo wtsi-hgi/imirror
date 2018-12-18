@@ -18,7 +18,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-set -euo pipefail
+set -uo pipefail
 
 readonly BINARY="$(readlink -fn "$0")"
 readonly PROGNAME="$(basename "${BINARY}")"
@@ -55,14 +55,16 @@ usage() {
 
   cat <<-EOF
 	${usage}  ${PROGNAME} [--find FIND_OPTIONS...]
-	       ${indent} [--lsf LSF_OPTIONS...]
+	       ${indent} [--bsub BSUB_OPTIONS...]
+	       ${indent} [--iput IPUT_OPTIONS...]
 	       ${indent} SOURCE TARGET
 	
 	Mirror a directory on a POSIX filesystem into an iRODS collection,
 	distributing the upload over an LSF cluster.
 	
 	  --find FIND_OPTIONS...  Optional arguments passed to find(1)
-	  --lsf LSF_OPTIONS...    Optional arguments passed to LSF submission
+	  --bsub BSUB_OPTIONS...  Optional arguments passed to LSF submission
+	  --iput IPUT_OPTIONS...  Optional arguments passed to iRODS upload
 	  SOURCE                  POSIX directory to source
 	  TARGET                  iRODS collection to target
 	
@@ -77,116 +79,256 @@ usage() {
 }
 
 strip_prefix() {
+  # Strip prefix from string
   local prefix="$1"
-  local data="$2"
-  echo "${data#${prefix}}"
+  local string="$2"
+  echo "${string#${prefix}}"
+}
+
+progress_report() {
+  # Output progress report for given source
+  local source="$1"
+
+  # TODO
+  false
+}
+
+__setup() {
+  # Setup job
+  local source="$1"
+
+  # TODO
+  false
+}
+
+__copy() {
+  # Copy job
+  local source="$1"
+
+  # TODO
+  false
 }
 
 main() {
-  local mode="$1"
+  local -i show_help=1
+  local -i fail_parse=0
 
-  case "${mode}" in
-    "__setup")
-      local source_dir="$2"
-      local dest_coll="$3"
+  trap '(( show_help )) && usage; exit $(( ! show_help || fail_parse ))' ERR
 
-      get_manifest() {
-        # Find files of a given type in the source directory, excluding
-        # the .imirror directory we created for keeping state
-        # FIXME This will break horribly for files with \n in their names
-        local type="$1"
-        find "${source_dir}" \
-             -mindepth 1 \
-             -path "${source_dir}/.imirror" -prune \
-             -o -type "${type}" -print
-      }
+  (( $# ))  # Fail on zero arguments
 
-      # Generate manifest
-      echo "Generating manifest..."
-      local manifest_dir="${source_dir}/.imirror/manifest"
-      mkdir -p "${manifest_dir}"
-      get_manifest d > "${manifest_dir}/dirs"
-      get_manifest f | split -da4 -n "r/${ELEMENTS}" - "${manifest_dir}/files."
+  # Check the first argument to determine the mode
+  case "$1" in
+    "__setup" | "__copy")
+      # Internally called methods
+      show_help=0
 
-      # Create subcollections
-      echo "Mirroring directory structure on iRODS..."
-      local subdir
-      local subcoll
-      while IFS= read -r subdir; do
-        subcoll="${dest_coll}/$(strip_prefix "${source_dir}/" "${subdir}")"
-        imkdir -p "${subcoll}"
-      done < "${manifest_dir}/dirs"
-
-      echo "Submitting distributed copy jobs..."
-      local log_dir="${source_dir}/.imirror/logs"
-      bsub -q normal \
-           -G hgi \
-           -M 1000 \
-           -R "select[mem>1000] rusage[mem=1000]" \
-           -J "imirror${RANDOM}[1-${ELEMENTS}]%${IPUT_LIMIT}" \
-           -o "${log_dir}/copy.%I.log" -e "${log_dir}/copy.%I.log" \
-           "${BINARY}" __copy "${source_dir}" "${dest_coll}"
+      local subcommand="$1"
+      local source="$2"
+      "${subcommand}" "${source}"
       ;;
 
-    "__copy")
-      local source_dir="$2"
-      local dest_coll="$3"
+    "--progress")
+      # Show progress report
+      show_help=0
 
-      local -i manifest_id="$(( LSB_JOBINDEX - 1 ))"
-      local manifest="$(printf "${source_dir}/.imirror/manifest/files.%04d" "${manifest_id}")"
-
-      echo "Beginning file copy..."
-      local source_file
-      local dest_file
-      local restart_info
-      while IFS= read -r source_file; do
-        restart_info="$(mktemp -d)"
-        dest_file="${dest_coll}/$(strip_prefix "${source_dir}/" "${source_file}")"
-        echo "Uploading ${source_file} to ${dest_file}"
-        iput -fKT --wlock --retries 3 \
-             -X "${restart_info}/restart" \
-             --lfrestart "${restart_info}/lfrestart" \
-             "${source_file}" "${dest_file}"
-        rm -rf "${restart_info}"
-      done < "${manifest}"
-
-      echo "Done"
+      local source="$(readlink -fn "${2-.}")"
+      progress_report "${source}"
       ;;
 
     *)
-      if ! (( $# == 2 )); then
-        stderr "Invalid arguments!"
-        usage
-        exit 1
+      # Normal invocation
+      local -a find_args=()
+      local -a bsub_args=()
+      local -a iput_args=()
+
+      if (( $# < 2 )); then
+        stderr "Must provide a source and target!"
+        fail_parse=1
+        false
       fi
 
-      local source_dir="$(readlink -fn "$1")"
-      local dest_coll="$2"
+      local state
+      while (( $# - 2 )); do
+        case "$1" in
+          "--find" | "--bsub" | "--iput")
+            state="${1:2}"
+            ;;
 
-      if ! [[ -d "${source_dir}" ]]; then
+          *)
+            if [[ -z "${state+x}" ]]; then
+              stderr "Unknown option!"
+              fail_parse=1
+              false
+            fi
+
+            # Excuse me while I throw-up in my mouth
+            eval "${state}_args+=(\"$1\")"
+            ;;
+        esac
+
+        shift
+      done
+
+      # Remaining arguments are the source and target, respectively
+      show_help=0
+      local source="$(readlink -fn "$1")"
+      local target="$2"
+
+      if ! [[ -d "${source}" ]]; then
         stderr "Source directory does not exist!"
-        usage
-        exit 1
+        false
       fi
 
-      # TODO Feature: Check destination collection exists...somehow
-
-      if [[ -d "${source_dir}/.imirror" ]]; then
-        stderr ".imirror directory already exists at source; delete this and try again!"
-        exit 1
+      if [[ -d "${source}/.imirror" ]]; then
+        stderr "imirror already run on source, showing progress report..."
+        main --progress "${source}"
+        exit
       fi
 
-      echo "Submitting job..."
-      local log_dir="${source_dir}/.imirror/logs"
-      mkdir -p "${log_dir}"
-      bsub -q normal \
-           -G hgi \
-           -M 1000 \
-           -R "select[mem>1000] rusage[mem=1000]" \
-           -o "${log_dir}/setup.log" -e "${log_dir}/setup.log" \
-           "${BINARY}" __setup "${source_dir}" "${dest_coll}"
+      if ! ils "${target}" >/dev/null 2>&1; then
+        stderr "Target collection does not exist or cannot be accessed!"
+        false
+      fi
+
+      # Initialise state
+      umask 0077
+      mkdir -p "${source}/.imirror/"{bin,manifest,log}
+
+      initialise_script() {
+        # Extract script from comments and apply templating
+        # FIXME? Potential code injection vector; I think %q is safe
+        local script="$1"
+        local arguments=""
+        local binary="${source}/.imirror/bin/${script}"
+
+        shift
+        if (( $# )); then
+          arguments="$(printf '"%q" ' "$@")"
+        fi
+
+        grep -F "#@${script}" "${BINARY}" \
+        | cut -f2- \
+        | sed "s#{{SOURCE}}#${source}#g;s#{{TARGET}}#${target}#g;s#{{ARGS}}#${arguments}#g" \
+        > "${binary}"
+
+        chmod +x "${binary}"
+      }
+
+      initialise_script find "${find_args[@]+"${find_args[@]}"}"
+      initialise_script bsub "${bsub_args[@]+"${bsub_args[@]}"}"
+      initialise_script iput "${iput_args[@]+"${iput_args[@]}"}"
+
+      local bsub="${source}/.imirror/bin/bsub"
+      local setup_log="${source}/.imirror/log/setup.log"
+      local job_id
+
+      if ! job_id="$("${bsub}" -o "${setup_log}" -e "${setup_log}" \
+                               "${BINARY}" __setup "${source}")"; then
+        stderr "Could not submit setup job!"
+        false
+      fi
+
+      echo "Mirroring ${source} to ${target}"
+      echo "Setup submitted as job ${job_id}"
+      echo "See logs in ${source}/.imirror/log or use --progress"
       ;;
   esac
 }
 
-main "${@-}"
+main "$@"
+
+# find wrapper script
+#@find	#!/usr/bin/env bash
+#@find	set -e
+#@find	find "{{SOURCE}}" \
+#@find	     -mindepth 1 \
+#@find	     \( -path "{{SOURCE}}/.imirror" -prune \) \
+#@find	     -o \( -type f {{ARGS}} -print0 \)
+
+# bsub wrapper script
+#@bsub	#!/usr/bin/env bash
+#@bsub	set -eo pipefail
+#@bsub	bsub {{ARGS}} "$@" | grep -Po '(?<=Job <)\d+(?=>)'
+
+# iput wrapper script
+#@iput	#!/usr/bin/env bash
+#@iput	set -eu
+#@iput	declare RESTART_INFO="$(mktemp -d)"
+#@iput	trap 'rm -rf "${RESTART_INFO}"' EXIT
+#@iput	iput -fKT --wlock --retries 3 \
+#@iput	     -X "${RESTART_INFO}/restart" \
+#@iput	     --lfrestart "${RESTART_INFO}/lfrestart" \
+#@iput	     {{ARGS}} \
+#@iput	     "$1" "$2"
+
+## main() {
+##   local mode="$1"
+## 
+##   case "${mode}" in
+##     "__setup")
+##       local source_dir="$2"
+##       local dest_coll="$3"
+## 
+##       get_manifest() {
+##         # Find files of a given type in the source directory, excluding
+##         # the .imirror directory we created for keeping state
+##         # FIXME This will break horribly for files with \n in their names
+##         local type="$1"
+##         find "${source_dir}" \
+##              -mindepth 1 \
+##              -path "${source_dir}/.imirror" -prune \
+##              -o -type "${type}" -print
+##       }
+## 
+##       # Generate manifest
+##       echo "Generating manifest..."
+##       local manifest_dir="${source_dir}/.imirror/manifest"
+##       mkdir -p "${manifest_dir}"
+##       get_manifest d > "${manifest_dir}/dirs"
+##       get_manifest f | split -da4 -n "r/${ELEMENTS}" - "${manifest_dir}/files."
+## 
+##       # Create subcollections
+##       echo "Mirroring directory structure on iRODS..."
+##       local subdir
+##       local subcoll
+##       while IFS= read -r subdir; do
+##         subcoll="${dest_coll}/$(strip_prefix "${source_dir}/" "${subdir}")"
+##         imkdir -p "${subcoll}"
+##       done < "${manifest_dir}/dirs"
+## 
+##       echo "Submitting distributed copy jobs..."
+##       local log_dir="${source_dir}/.imirror/logs"
+##       bsub -q normal \
+##            -G hgi \
+##            -M 1000 \
+##            -R "select[mem>1000] rusage[mem=1000]" \
+##            -J "imirror${RANDOM}[1-${ELEMENTS}]%${IPUT_LIMIT}" \
+##            -o "${log_dir}/copy.%I.log" -e "${log_dir}/copy.%I.log" \
+##            "${BINARY}" __copy "${source_dir}" "${dest_coll}"
+##       ;;
+## 
+##     "__copy")
+##       local source_dir="$2"
+##       local dest_coll="$3"
+## 
+##       local -i manifest_id="$(( LSB_JOBINDEX - 1 ))"
+##       local manifest="$(printf "${source_dir}/.imirror/manifest/files.%04d" "${manifest_id}")"
+## 
+##       echo "Beginning file copy..."
+##       local source_file
+##       local dest_file
+##       local restart_info
+##       while IFS= read -r source_file; do
+##         restart_info="$(mktemp -d)"
+##         dest_file="${dest_coll}/$(strip_prefix "${source_dir}/" "${source_file}")"
+##         echo "Uploading ${source_file} to ${dest_file}"
+##         iput -fKT --wlock --retries 3 \
+##              -X "${restart_info}/restart" \
+##              --lfrestart "${restart_info}/lfrestart" \
+##              "${source_file}" "${dest_file}"
+##         rm -rf "${restart_info}"
+##       done < "${manifest}"
+## 
+##       echo "Done"
+##       ;;
