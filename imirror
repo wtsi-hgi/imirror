@@ -85,6 +85,20 @@ strip_prefix() {
   echo "${string#${prefix}}"
 }
 
+working() {
+  # Output working path
+  local source="$1"
+  local work_dir="${source}/.imirror"
+
+  shift
+  while (( $# )); do
+    work_dir="${work_dir}/$1"
+    shift
+  done
+
+  echo "${work_dir}"
+}
+
 progress_report() {
   # Output progress report for given source
   local source="$1"
@@ -97,7 +111,52 @@ __setup() {
   # Setup job
   local source="$1"
 
+  local find="$(working "${source}" bin find)"
+  local bsub="$(working "${source}" bin bsub)"
+
+  strip_source() {
+    # Strip the prefixed source directory
+    # from the find output and requote
+    local quoted_source="$(stat -c "%N" "${source}")"
+    cut -c "${#quoted_source}-" | sed "s/^/'/"
+  }
+
+  extract_dirs() {
+    # Strip the last component from the first
+    # column of the find output and requote
+    cut -f1 \
+    | grep -Po "^'.*\/(?=[^\/]+'$)" \
+    | sed "s#\$#'#"
+  }
+
+  # Generate manifests
+  echo -n "Generating manifests... "
+  local manifest="$(working "${source}" manifest)"
+
+  # Welcome to your nightmares!...
+  local -A total
+  eval "total=($(
+    "${find}" \
+    | strip_source \
+    | tee >(split -da4 -n "r/${ELEMENTS}" - "${manifest}/files.") \
+          >(extract_dirs | sort | uniq > "${manifest}/dirs") \
+    | awk 'BEGIN { FS = "\t"; OFS = " " }
+                 { files++; size += $2 }
+           END   { print "[files]=" files, "[size]=" size }'))"
+
+  echo "Done!"
+
+  if (( ! total[files] )); then
+    stderr "No files found to upload!"
+    exit 1
+  fi
+
+  echo "Found ${total[files]} to upload, totalling ${total[size]} bytes."
+
   # TODO
+  # Mirror subcollections on iRODS
+  # Submit copy jobs
+
   false
 }
 
@@ -180,7 +239,7 @@ main() {
         false
       fi
 
-      if [[ -d "${source}/.imirror" ]]; then
+      if [[ -d "$(working "${source}")" ]]; then
         stderr "imirror already run on source, showing progress report..."
         main --progress "${source}"
         exit
@@ -193,14 +252,14 @@ main() {
 
       # Initialise state
       umask 0077
-      mkdir -p "${source}/.imirror/"{bin,manifest,log}
+      mkdir -p "$(working "${source}")/"{bin,manifest,log}
 
       initialise_script() {
         # Extract script from comments and apply templating
         # FIXME? Potential code injection vector; I think %q is safe
         local script="$1"
         local arguments=""
-        local binary="${source}/.imirror/bin/${script}"
+        local binary="$(working "${source}" bin "${script}")"
 
         shift
         if (( $# )); then
@@ -219,8 +278,8 @@ main() {
       initialise_script bsub "${bsub_args[@]+"${bsub_args[@]}"}"
       initialise_script iput "${iput_args[@]+"${iput_args[@]}"}"
 
-      local bsub="${source}/.imirror/bin/bsub"
-      local setup_log="${source}/.imirror/log/setup.log"
+      local bsub="$(working "${source}" bin bsub)"
+      local setup_log="$(working "${source}" log setup.log)"
       local job_id
 
       if ! job_id="$("${bsub}" -o "${setup_log}" -e "${setup_log}" \
@@ -231,7 +290,7 @@ main() {
 
       echo "Mirroring ${source} to ${target}"
       echo "Setup submitted as job ${job_id}"
-      echo "See logs in ${source}/.imirror/log or use --progress"
+      echo "See logs in $(working "${source}" log) or use --progress"
       ;;
   esac
 }
