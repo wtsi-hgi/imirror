@@ -79,6 +79,10 @@ operation of `imirror`:
 
 Tuning these is left as an exercise for the reader.
 
+**Note** `ELEMENTS` should not be set higher than 10,000 as it will
+break the way the file manifest is chunked. Your LSF administrator will
+have probably complained at you long before this point.
+
 ### Working Directory
 
 When `imirror` is invoked, it will create a working directory (if one
