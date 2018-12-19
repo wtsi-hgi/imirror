@@ -123,11 +123,11 @@ __setup() {
   }
 
   extract_dirs() {
-    # Strip the last component from the first
-    # column of the find output and requote
+    # Simulate dirname by stripping the last component
+    # from the first column of the find output, then requote
     cut -f1 \
-    | grep -Po "^'.*\/(?=[^\/]+'$)" \
-    | sed "s#\$#'#"
+    | grep -Po "(?<=^'\/).+(?=\/[^\/]+'$)" \
+    | sed "s/.*/'&'/"
   }
 
   # Generate manifests
