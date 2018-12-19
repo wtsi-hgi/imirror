@@ -241,10 +241,11 @@ main "$@"
 # find wrapper script
 #@find	#!/usr/bin/env bash
 #@find	set -e
+#@find	declare TAB=$'\t'
 #@find	find "{{SOURCE}}" \
 #@find	     -mindepth 1 \
 #@find	     \( -path "{{SOURCE}}/.imirror" -prune \) \
-#@find	     -o \( -type f {{ARGS}} -print0 \)
+#@find	     -o \( -type f {{ARGS}} -exec stat -c "%N${TAB}%s" {} \; \)
 
 # bsub wrapper script
 #@bsub	#!/usr/bin/env bash
@@ -260,7 +261,7 @@ main "$@"
 #@iput	     -X "${RESTART_INFO}/restart" \
 #@iput	     --lfrestart "${RESTART_INFO}/lfrestart" \
 #@iput	     {{ARGS}} \
-#@iput	     "$1" "$2"
+#@iput	     "{{SOURCE}}/$1" "{{TARGET}}/$2"
 
 ## main() {
 ##   local mode="$1"
