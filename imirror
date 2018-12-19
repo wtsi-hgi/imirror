@@ -110,6 +110,7 @@ progress_report() {
 __setup() {
   # Setup job
   local source="$1"
+  local target="$2"
 
   local find="$(working "${source}" bin find)"
   local bsub="$(working "${source}" bin bsub)"
@@ -169,7 +170,7 @@ __setup() {
 
   if ! job_id="$("${bsub}" -o "${copy_log}" -e "${copy_log}" \
                            -J "${job_spec}" \
-                           "${BINARY}" __copy "${source}")"; then
+                           "${BINARY}" __copy "${source}" "${target}")"; then
     stderr "Could not submit upload jobs!"
     false
   fi
@@ -203,7 +204,8 @@ main() {
 
       local subcommand="$1"
       local source="$2"
-      "${subcommand}" "${source}"
+      local target="$3"
+      "${subcommand}" "${source}" "${target}"
       ;;
 
     "--progress")
@@ -302,7 +304,7 @@ main() {
       local job_id
 
       if ! job_id="$("${bsub}" -o "${setup_log}" -e "${setup_log}" \
-                               "${BINARY}" __setup "${source}")"; then
+                               "${BINARY}" __setup "${source}" "${target}")"; then
         stderr "Could not submit setup job!"
         false
       fi
