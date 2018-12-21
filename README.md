@@ -83,10 +83,38 @@ Tuning these is left as an exercise for the reader.
 break the way the file manifest is chunked. Your LSF administrator will
 have probably complained at you long before this point.
 
-### Working Directory
+### State
 
-When `imirror` is invoked, it will create a working directory (if one
-doesn't already exist) in `SOURCE`, named `.imirror`. This directory and
-its contents will not be included in the copy. All working files,
-including logs, will reside here; it will not be deleted once `imirror`
-completes.
+When `imirror` is invoked, it will create a working directory in the
+source directory named `.imirror`, accessible only to that user. This
+directory and its contents will not be included in the copy. All working
+files, including logs, will reside here; it will not be deleted once
+`imirror` completes.
+
+#### Manifest
+
+The list of found files is split up into approximately even chunks, of
+up to `ELEMENTS` in number. This defines how the upload is distributed
+across files. (Note that chunk size is a function of the number of
+files, rather than aggregate file size. This can cause imbalance in the
+distributed jobs; e.g., if one chunk contains a lot of very large files,
+versus a lot of very small ones.)
+
+The same list is also used to derive the directory structure. This is
+first mirrored on iRODS as subcollections of the target collection
+before the uploading starts.
+
+#### Workflow and Logging
+
+The `--progress` option will parse the logs into a human-readable
+report. However, for reference sake, the logs are described herein.
+
+The setup job runs first and writes `setup.log`. If it succeeds, it will
+also log the number and size of files to be uploaded, as well as how
+many chunks it has been distributed into. The upload jobs will then be
+submitted, with its job ID logged.
+
+The upload jobs will then log to `copy.XXXX.log` and `done.XXXX.log`,
+where `XXXX` is the index of the distributed job. The `copy.XXXX.log` is
+the overall log for the job, whereas `done.XXXX.log` will be an
+incremental retelling of the respective manifest file.
