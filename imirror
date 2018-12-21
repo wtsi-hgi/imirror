@@ -133,6 +133,7 @@ __setup() {
   # Generate manifests
   echo -n "Generating manifests... "
   local manifest="$(working "${source}" manifest)"
+  local dir_manifest="${manifest}/dirs"
 
   # Welcome to your nightmares!...
   local -A total
@@ -140,7 +141,7 @@ __setup() {
     "${find}" \
     | strip_source \
     | tee >(split -da4 -en "r/${ELEMENTS}" - "${manifest}/files.") \
-          >(extract_dirs | sort | uniq > "${manifest}/dirs") \
+          >(extract_dirs | sort | uniq > "${dir_manifest}") \
     | awk 'BEGIN { FS = "\t"; OFS = " " }
                  { files++; size += $2 }
            END   { print "[files]=" files, "[size]=" size }'))"
@@ -163,6 +164,7 @@ __setup() {
 
   local -i elements="${ELEMENTS}"
   if (( total[files] < ELEMENTS )); then elements=${total[files]}; fi
+  echo "${elements}" > "$(working "${source}" log elements)"
 
   local copy_log="$(working "${source}" log "copy.%I.log")"
   local job_spec="imirror${RANDOM}[1-${elements}]%${IPUT_LIMIT}"
