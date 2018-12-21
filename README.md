@@ -132,3 +132,7 @@ The upload jobs will then log to `copy.XXXX.log` and `done.XXXX.log`,
 where `XXXX` is the index of the distributed job. The `copy.XXXX.log` is
 the overall log for the job, whereas `done.XXXX.log` will be an
 incremental retelling of the respective manifest file.
+
+When the `--resume` option is correctly used, the state of the aborted
+upload will be archived alongside its progress report. The latter will
+be used by the `--progress` option to give a full history of the upload.
