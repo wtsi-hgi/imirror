@@ -10,6 +10,8 @@ distributing the upload over an LSF cluster.
 
     imirror --progress [SOURCE]
 
+    imirror --resume [SOURCE]
+
 ### Invocation
 
 | Option                   | Description                               |
@@ -60,6 +62,18 @@ already tuned for resilience in the following ways:
 There are very few options to `iput` that are still relevant (e.g.,
 ticket-based access with `-t`), but they can be specified here if needs
 be.
+
+### Resumption
+
+Using the `--resume` option against the `SOURCE` directory (or the
+current working directory, if `SOURCE` is not specified) will cause
+`imirror` to resume a previously aborted upload. If the `SOURCE` has
+completed or is still in progress, then the tracking report will be
+shown instead.
+
+**Note** If whatever issue that caused the abortion in the first place
+has not been resolved in the meantime, there is no reason to suspect
+that resuming the upload won't immediately fail again.
 
 ### Tracking
 

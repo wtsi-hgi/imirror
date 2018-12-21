@@ -70,7 +70,15 @@ usage() {
 	
 	${usage}  ${PROGNAME} --progress [SOURCE]
 	
-	Report on the progress of a previous invocation.
+	Report on the progress of a running/previous upload.
+	
+	  --progress [SOURCE]     POSIX source directory
+	
+	The current working directory is used, if the SOURCE is not specified.
+	
+	${usage}  ${PROGNAME} --resume [SOURCE]
+	
+	Resume an aborted upload.
 	
 	  --progress [SOURCE]     POSIX source directory
 	
@@ -80,6 +88,7 @@ usage() {
 
 strip_prefix() {
   # Strip prefix from string
+  # FIXME Do we still need this?...
   local prefix="$1"
   local string="$2"
   echo "${string#${prefix}}"
@@ -99,8 +108,16 @@ working() {
   echo "${work_dir}"
 }
 
-progress_report() {
+__progress() {
   # Output progress report for given source
+  local source="$1"
+
+  # TODO
+  false
+}
+
+__resume() {
+  # Resume aborted upload
   local source="$1"
 
   # TODO
@@ -210,12 +227,16 @@ main() {
       "${subcommand}" "${source}" "${target}"
       ;;
 
-    "--progress")
-      # Show progress report
+    "--progress" | "--resume")
+      # Post-invocation methods
       show_help=0
 
+      local subcommand="${1//-/_}"  # Turn prefixed dashes into underscores
       local source="$(readlink -fn "${2-.}")"
-      progress_report "${source}"
+
+      # TODO Check we've got a genuine imirror source directory
+
+      "${subcommand}" "${source}"
       ;;
 
     *)
