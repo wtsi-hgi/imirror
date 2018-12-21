@@ -181,7 +181,7 @@ __setup() {
 
   local -i elements="${ELEMENTS}"
   if (( total[files] < ELEMENTS )); then elements=${total[files]}; fi
-  echo "${elements}" > "$(working "${source}" log elements)"
+  echo "${elements}%${IPUT_LIMIT}" > "$(working "${source}" log spec)"
 
   local copy_log="$(working "${source}" log "copy.%I.log")"
   local job_spec="imirror${RANDOM}[1-${elements}]%${IPUT_LIMIT}"
