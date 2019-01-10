@@ -53,11 +53,12 @@ To fine-tune the behaviour of the iRODS upload (`iput`), you may use the
 `--iput` declaration. Note, however, that the default invocation is
 already tuned for resilience in the following ways:
 
-* Client and server-side checksum validation;
+* Force write (`-f`);
+* Client and server-side checksum verification (`-K`);
 * Retrying (up to three times), with restart information for small and
-  large files;
-* Socket keepalive;
-* Exclusive write locking.
+  large files (`--retries`, `-X` and `--lfrestart`, respectively);
+* Socket keepalive (`-T`);
+* Exclusive write locking (`--wlock`).
 
 There are very few options to `iput` that are still relevant (e.g.,
 ticket-based access with `-t`), but they can be specified here if needs
