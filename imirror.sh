@@ -280,6 +280,9 @@ upload_chunk_to_irods() {
         continue
       fi
 
+      # TODO Dragons be here
+      # Delete local file automatically once uploaded and verified
+
       duration=$(( $(now) - start ))
       total_size=$(( total_size + local_size ))
       >&2 cat <<-EOF
