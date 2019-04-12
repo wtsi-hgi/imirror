@@ -8,17 +8,15 @@ set -euo pipefail
 # Environment variables
 # * WORK_DIR    The working directory (default: pwd)
 # * CHUNK_SIZE  The maximum number of files in each chunk (default: 10)
+# * IPUT_LIMIT  The maximum number of concurrent iputs (default: 20)
 # * GROUP       The group under which to submit (default: id -gn)
 # * PREP_Q      The queue in which to run the preparation job (default: normal)
 # * COPY_Q      The queue in which to run the copy jobs (default: normal)
 
 declare BINARY="$(readlink -fn "$0")"
-export WORK_DIR="${WORK_DIR-$(pwd)}"
 
-# LSF job environment variables
+export WORK_DIR="${WORK_DIR-$(pwd)}"
 export GROUP="${GROUP-$(id -gn)}"
-export PREP_Q="${PREP_Q-normal}"
-export COPY_Q="${COPY_Q-normal}"
 
 export LANG="C"
 
@@ -74,6 +72,7 @@ prepare_from_mpistat() {
   local -i chunks
   local -i chunk_suffix_length
 
+  local -i iput_limit="${IPUT_LIMIT-20}"
   local job_id
 
   (
@@ -155,18 +154,26 @@ prepare_from_mpistat() {
           --suffix-length "${chunk_suffix_length}" --numeric-suffixes=1 \
           "${temp_dir}/files" "${WORK_DIR}/chunks/"
 
-    (
-      # Report mirroring of directories and chunking
-      echo
-      echo "Mirrored ${directory_root} into ${collection_root}:"
-      sed -z "s/^/* /" "${temp_dir}/dirs" | xargs -0n1
+    job_id="$(
+      export __IMIRROR_SUFFIX_LENGTH="${chunk_suffix_length}"
 
-      echo
-      echo "${file_count} files to upload, separated into ${chunks} chunks of up to ${chunk_size} files"
-    ) >&2
+      bsub -G "${GROUP}" -q "${COPY_Q-normal}" \
+           -J "imirror${RANDOM}[1-${chunks}]%${iput_limit}" \
+           -o "${WORK_DIR}/logs/copy.%I.log" -e "${WORK_DIR}/logs/copy.%I.log" \
+           -M 1000 -R "select[mem>1000] rusage[mem=1000]" \
+           "${BINARY}" __copy "${collection_root}" \
+      | grep -Po '(?<=Job <)\d+(?=>)'
+    )"
+
+    >&2 cat <<-EOF
+				
+				Mirrored structure of ${directory_root} into ${collection_root}:
+				$(sed -z "s/^/* /" "${temp_dir}/dirs" | xargs -0n1)
+				
+				${file_count} files to upload, separated into ${chunks} chunks of up to ${chunk_size} files each
+				Copy job submitted as Job ${job_id}, throttled to ${iput_limit} concurrent uploads
+				EOF
   )
-
-  # TODO Submit copy job
 }
 
 main() {
@@ -197,7 +204,7 @@ main() {
 
     mkdir -p "${WORK_DIR}/chunks" "${WORK_DIR}/logs"
 
-    job_id="$(bsub -G "${GROUP}" -q "${PREP_Q}" \
+    job_id="$(bsub -G "${GROUP}" -q "${PREP_Q-normal}" \
                    -o "${WORK_DIR}/logs/prep.log" -e "${WORK_DIR}/logs/prep.log" \
                    -M 5000 -R "select[mem>5000] rusage[mem=5000]" \
                    "${BINARY}" __prepare "${mpistat_file}" "${local_directory}" "${irods_collection}" \
