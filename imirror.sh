@@ -5,8 +5,20 @@
 
 set -euo pipefail
 
+# Environment variables
+# * WORK_DIR    The working directory (default: pwd)
+# * CHUNK_SIZE  The maximum number of files in each chunk (default: 10)
+# * GROUP       The group under which to submit (default: id -gn)
+# * PREP_Q      The queue in which to run the preparation job (default: normal)
+# * COPY_Q      The queue in which to run the copy jobs (default: normal)
+
 declare BINARY="$(readlink -fn "$0")"
 export WORK_DIR="${WORK_DIR-$(pwd)}"
+
+# LSF job environment variables
+export GROUP="${GROUP-$(id -gn)}"
+export PREP_Q="${PREP_Q-normal}"
+export COPY_Q="${COPY_Q-normal}"
 
 export LANG="C"
 
@@ -42,30 +54,6 @@ strip_slash() {
   echo "${path}"
 }
 
-fetch_inodes() {
-  # Filter out inodes of a specific mode matching the given root
-  local file_mode="$1"
-  local directory_root="$2"
-
-  local common_prefix="$(printf "%s\n%s\n" \
-                           "$(echo -n "${directory_root}" | base64)" \
-                           "$(echo -n "${directory_root}/" | base64)" \
-                       | sed -e 'N;s/^\(.*\).*\n\1.*$/\1/')"
-
-  awk -v PREFIX="${common_prefix}" -v MODE="${file_mode}" '
-    BEGIN { FS = OFS = "\t" }
-
-    # Find directories whose base64 encoding have the correct prefix
-    $8 == MODE && $1 ~ "^" PREFIX {
-      # n.b., "AA==" is the base64 encoding of \0, so we can stream
-      # base64 decoding efficiently, with NULL delimited output
-      print $1 "AA=="
-    }
-  ' \
-  | base64 -di \
-  | grep -zE "^${directory_root}(/|$)"
-}
-
 swap_roots() {
   # Replace the local directory root with the collection root
   local directory_root="$1"
@@ -86,10 +74,37 @@ prepare_from_mpistat() {
   local -i chunks
   local -i chunk_suffix_length
 
+  local job_id
+
   (
     local lock_dir="$(mktemp -d)"
     local temp_dir="$(mktemp -d)"
     trap 'rm -rf ${lock_dir} ${temp_dir}' EXIT
+
+    fetch_mpistat_inodes() {
+      # Filter out inodes from mpistat data (from stdin) of a specific mode
+      # matching the given root directory prefix
+      local file_mode="$1"
+      local directory_root="$2"
+
+      local common_prefix="$(printf "%s\n%s\n" \
+                               "$(echo -n "${directory_root}" | base64)" \
+                               "$(echo -n "${directory_root}/" | base64)" \
+                             | sed -e 'N;s/^\(.*\).*\n\1.*$/\1/')"
+
+      awk -v PREFIX="${common_prefix}" -v MODE="${file_mode}" '
+        BEGIN { FS = OFS = "\t" }
+
+        # Find files of MODE whose base64 encoding have the correct prefix
+        $8 == MODE && $1 ~ "^" PREFIX {
+          # n.b., "AA==" is the base64 encoding of \0, so we can stream
+          # base64 decoding efficiently, with NULL-delimited output
+          print $1 "AA=="
+        }
+      ' \
+      | base64 -di \
+      | grep -zE "^${directory_root}(/|$)"
+    }
 
     mirror_directories() {
       local directory_root="$1"
@@ -108,7 +123,7 @@ prepare_from_mpistat() {
         '
       }
 
-      fetch_inodes d "${directory_root}" \
+      fetch_mpistat_inodes d "${directory_root}" \
       | find_leaves \
       | swap_roots "${directory_root}" "${collection_root}" \
       | tee >(xargs -0I% echo imkdir -p % >/dev/null 2>&1)  # TODO Debug
@@ -116,11 +131,14 @@ prepare_from_mpistat() {
 
     echo "Reading mpistat data from ${mpistat_file}..." >&2
 
+    # The shuffle in here is to increase the probability of uniformly
+    # sized chunks, in terms of total file size. Said probability tends
+    # to 1 as the number of the files in each chunk increases
     gunzip -c "${mpistat_file}" \
     | tee >(lock "${lock_dir}/mirror_directories" \
               mirror_directories "${directory_root}" "${collection_root}" \
               > "${temp_dir}/dirs") \
-    | fetch_inodes f "${directory_root}" \
+    | fetch_mpistat_inodes f "${directory_root}" \
     | shuf -z \
     > "${temp_dir}/files"
 
@@ -130,8 +148,9 @@ prepare_from_mpistat() {
     chunks=$(( (file_count / chunk_size) + (file_count % chunk_size != 0) ))
     chunk_suffix_length=${#chunks}
 
-    # TODO Move state directory creation to controller
-    mkdir -p "${WORK_DIR}/chunks" "${WORK_DIR}/logs"
+    # We split here, rather than at the end of the parsing pipeline,
+    # because we need to know the total number of files upfront, so we
+    # can calculate the suffix length and set the copy job array size
     split --lines "${chunk_size}" --separator="\0" \
           --suffix-length "${chunk_suffix_length}" --numeric-suffixes=1 \
           "${temp_dir}/files" "${WORK_DIR}/chunks/"
@@ -151,8 +170,72 @@ prepare_from_mpistat() {
 }
 
 main() {
-  
+  local mode="$1"
 
+  if [[ "${mode:0:2}" == "__" ]]; then
+    shift
+  else
+    mode="__user"
+  fi
+
+  __user() {
+    # imirror MPISTAT_FILE LOCAL_DIR IRODS_COLL
+    local mpistat_file="$1"
+    local local_directory="$2"
+    local irods_collection="$3"
+    local job_id
+
+    if [[ -d "${WORK_DIR}/logs" ]] || [[ -d "${WORK_DIR}/chunks" ]]; then
+      >&2 echo "Working directory is not clean!"
+      exit 1
+    fi
+
+    if ils "${irods_collection}" >/dev/null 2>&1; then
+      >&2 echo "iRODS collection already exists!"
+      exit 1
+    fi
+
+    mkdir -p "${WORK_DIR}/chunks" "${WORK_DIR}/logs"
+
+    job_id="$(bsub -G "${GROUP}" -q "${PREP_Q}" \
+                   -o "${WORK_DIR}/logs/prep.log" -e "${WORK_DIR}/logs/prep.log" \
+                   -M 5000 -R "select[mem>5000] rusage[mem=5000]" \
+                   "${BINARY}" __prepare "${mpistat_file}" "${local_directory}" "${irods_collection}" \
+              | grep -Po '(?<=Job <)\d+(?=>)')"
+
+    cat <<-EOF
+			Mirroring     ${local_directory} to ${irods_collection}
+			mpistat Data  ${mpistat_file}
+			
+			Preparation job submitted as Job ${job_id}
+			EOF
+  }
+
+  __prepare() {
+    # imirror __prepare MPISTAT_FILE LOCAL_DIR IRODS_COLL
+    # TODO This is currently just a trivial wrapper, but it can be
+    # extended in the future to allow non-mpistat submissions
+    local mpistat_file="$1"
+    local local_directory="$2"
+    local irods_collection="$3"
+
+    prepare_from_mpistat "${mpistat_file}" "${local_directory}" "${irods_collection}"
+  }
+
+  __copy() {
+    # TODO imirror __copy IRODS_COLL
+    false
+  }
+
+  case "${mode}" in
+    "__user" | "__prepare" | "__copy")
+      "${mode}" "$@"
+      ;;
+
+    *)
+      false
+      ;;
+  esac
 }
 
 main "$@"
