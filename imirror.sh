@@ -67,8 +67,8 @@ prepare_from_mpistat() {
   # Parse the mpistat file to create the directory structure on iRODS
   # and the list of files, chunked, for the distributed copy submission
   local mpistat_file="$1"
-  local directory_root="$(strip_slash "$2")"
-  local collection_root="$(strip_slash "$3")"
+  local local_directory="$(strip_slash "$2")"
+  local irods_collection="$(strip_slash "$3")"
 
   local -i file_count
   local -i chunk_size="${CHUNK_SIZE-10}"
@@ -87,11 +87,11 @@ prepare_from_mpistat() {
       # Filter out inodes from mpistat data (from stdin) of a specific mode
       # matching the given root directory prefix
       local file_mode="$1"
-      local directory_root="$2"
+      local local_directory="$2"
 
       local common_prefix="$(printf "%s\n%s\n" \
-                               "$(echo -n "${directory_root}" | base64)" \
-                               "$(echo -n "${directory_root}/" | base64)" \
+                               "$(echo -n "${local_directory}" | base64)" \
+                               "$(echo -n "${local_directory}/" | base64)" \
                              | sed -e 'N;s/^\(.*\).*\n\1.*$/\1/')"
 
       awk -v PREFIX="${common_prefix}" -v MODE="${file_mode}" '
@@ -105,12 +105,12 @@ prepare_from_mpistat() {
         }
       ' \
       | base64 -di \
-      | grep -zE "^${directory_root}(/|$)"
+      | grep -zE "^${local_directory}(/|$)"
     }
 
     mirror_directories() {
-      local directory_root="$1"
-      local collection_root="$2"
+      local local_directory="$1"
+      local irods_collection="$2"
 
       find_leaves() {
         # Get the leaf nodes of a directory hierarchy
@@ -125,9 +125,9 @@ prepare_from_mpistat() {
         '
       }
 
-      fetch_mpistat_inodes d "${directory_root}" \
+      fetch_mpistat_inodes d "${local_directory}" \
       | find_leaves \
-      | swap_roots "${directory_root}" "${collection_root}" \
+      | swap_roots "${local_directory}" "${irods_collection}" \
       | tee >(xargs -0I% echo imkdir -p % >/dev/null 2>&1)  # TODO Debug
     }
 
@@ -138,9 +138,9 @@ prepare_from_mpistat() {
     # to 1 as the number of the files in each chunk increases
     gunzip -c "${mpistat_file}" \
     | tee >(lock "${lock_dir}/mirror_directories" \
-              mirror_directories "${directory_root}" "${collection_root}" \
+              mirror_directories "${local_directory}" "${irods_collection}" \
               > "${temp_dir}/dirs") \
-    | fetch_mpistat_inodes f "${directory_root}" \
+    | fetch_mpistat_inodes f "${local_directory}" \
     | shuf -z \
     > "${temp_dir}/files"
 
@@ -164,13 +164,13 @@ prepare_from_mpistat() {
            -J "imirror${RANDOM}[1-${chunks}]%${iput_limit}" \
            -o "${LOG_DIR}/copy.%I.log" -e "${LOG_DIR}/copy.%I.log" \
            -M 1000 -R "select[mem>1000] rusage[mem=1000]" \
-           "${BINARY}" __copy "${collection_root}" \
+           "${BINARY}" __copy "${local_directory}" "${irods_collection}" \
       | grep -Po '(?<=Job <)\d+(?=>)'
     )"
 
     >&2 cat <<-EOF
 				
-				Mirrored structure of ${directory_root} into ${collection_root}:
+				Mirrored structure of ${local_directory} into ${irods_collection}:
 				$(sed -z "s/^/* /" "${temp_dir}/dirs" | xargs -0n1)
 				
 				${file_count} files to upload, separated into ${chunks} chunks of up to ${chunk_size} files each
@@ -181,7 +181,8 @@ prepare_from_mpistat() {
 
 upload_chunk_to_irods() {
   local chunk_file="$1"
-  local root_collection="$2"
+  local local_directory="$2"
+  local irods_collection="$3"
 
   false
 }
@@ -241,16 +242,17 @@ main() {
   }
 
   __copy() {
-    # imirror __copy IRODS_COLL
+    # imirror __copy LOCAL_DIR IRODS_COLL
     if [[ -z "${LSB_JOBINDEX+x}" ]] || [[ -z "${__IMIRROR_SUFFIX_LENGTH+x}" ]]; then
       >&2 echo "Copy job incorrectly submitted!"
       exit 1
     fi
 
-    local irods_collection="$1"
+    local local_directory="$1"
+    local irods_collection="$2"
     local chunk_file="${CHUNK_DIR}/$(printf "%0${__IMIRROR_SUFFIX_LENGTH}d" "${LSB_JOBINDEX}")"
 
-    upload_chunk_to_irods "${chunk_file}" "${irods_collection}"
+    upload_chunk_to_irods "${chunk_file}" "${local_directory}" "${irods_collection}"
   }
 
   case "${mode}" in
