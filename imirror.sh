@@ -18,6 +18,9 @@ declare BINARY="$(readlink -fn "$0")"
 export WORK_DIR="${WORK_DIR-$(pwd)}"
 export GROUP="${GROUP-$(id -gn)}"
 
+declare LOG_DIR="${WORK_DIR}/logs"
+declare CHUNK_DIR="${WORK_DIR}/chunks"
+
 export LANG="C"
 
 lock() {
@@ -152,14 +155,14 @@ prepare_from_mpistat() {
     # can calculate the suffix length and set the copy job array size
     split --lines "${chunk_size}" --separator="\0" \
           --suffix-length "${chunk_suffix_length}" --numeric-suffixes=1 \
-          "${temp_dir}/files" "${WORK_DIR}/chunks/"
+          "${temp_dir}/files" "${CHUNK_DIR}/"
 
     job_id="$(
       export __IMIRROR_SUFFIX_LENGTH="${chunk_suffix_length}"
 
       bsub -G "${GROUP}" -q "${COPY_Q-normal}" \
            -J "imirror${RANDOM}[1-${chunks}]%${iput_limit}" \
-           -o "${WORK_DIR}/logs/copy.%I.log" -e "${WORK_DIR}/logs/copy.%I.log" \
+           -o "${LOG_DIR}/copy.%I.log" -e "${LOG_DIR}/copy.%I.log" \
            -M 1000 -R "select[mem>1000] rusage[mem=1000]" \
            "${BINARY}" __copy "${collection_root}" \
       | grep -Po '(?<=Job <)\d+(?=>)'
@@ -192,7 +195,7 @@ main() {
     local irods_collection="$3"
     local job_id
 
-    if [[ -d "${WORK_DIR}/logs" ]] || [[ -d "${WORK_DIR}/chunks" ]]; then
+    if [[ -e "${LOG_DIR}" ]] || [[ -e "${CHUNK_DIR}" ]]; then
       >&2 echo "Working directory is not clean!"
       exit 1
     fi
@@ -202,10 +205,10 @@ main() {
       exit 1
     fi
 
-    mkdir -p "${WORK_DIR}/chunks" "${WORK_DIR}/logs"
+    mkdir -p "${LOG_DIR}" "${CHUNK_DIR}"
 
     job_id="$(bsub -G "${GROUP}" -q "${PREP_Q-normal}" \
-                   -o "${WORK_DIR}/logs/prep.log" -e "${WORK_DIR}/logs/prep.log" \
+                   -o "${LOG_DIR}/prep.log" -e "${LOG_DIR}/prep.log" \
                    -M 5000 -R "select[mem>5000] rusage[mem=5000]" \
                    "${BINARY}" __prepare "${mpistat_file}" "${local_directory}" "${irods_collection}" \
               | grep -Po '(?<=Job <)\d+(?=>)')"
