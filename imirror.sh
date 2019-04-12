@@ -184,7 +184,121 @@ upload_chunk_to_irods() {
   local local_directory="$2"
   local irods_collection="$3"
 
-  false
+  now() {
+    date +"%s"
+  }
+
+  rate() {
+    local -i bytes="$1"
+    local -i duration="$2"
+
+    echo "${bytes} ${duration}" \
+    | awk '{ printf("%.1f MiB/s", ($1 / 1024^2) / $2) }'
+  }
+
+  local_md5sum() {
+    local filename="$1"
+    md5sum "${filename}" | cut -c-32
+  }
+
+  irods_checksum() {
+    local fq_path="$1"
+    local collection="$(dirname "${fq_path}")"
+    local dataobject="$(basename "${fq_path}")"
+
+    baton -c "${collection}" -d "${dataobject}" \
+    | baton-list --checksum \
+    | jq -r .checksum
+  }
+
+  (
+    local -i failures=0
+    local -i total_size=0
+    local -i total_start="$(now)"
+
+    >&2 echo "Uploading chunk ${chunk_file} to iRODS:"
+
+    local temp_dir="$(mktemp -d)"
+    local lock_dir="$(mktemp -d)"
+    trap 'rm -rf ${lock_dir} ${temp_dir}' EXIT
+
+    local local_file
+    local -i local_size
+    local local_md5
+    local irods_file
+    local irods_md5
+    local -i start
+    local -i duration
+    local tmp_md5sum
+    local tmp_restart
+    local tmp_lfrestart
+    while IFS= read -rd '' local_file; do
+      start="$(now)"
+
+      tmp_md5sum="$(mktemp -p "${temp_dir}")"
+      tmp_restart="$(mktemp -p "${temp_dir}")"
+      tmp_lfrestart="$(mktemp -p "${temp_dir}")"
+
+      irods_file="$(echo "${local_file}" | swap_roots "${local_directory}" "${irods_collection}")"
+      local_size="$(stat -c "%s" "${local_file}")"
+
+      >&2 cat <<-EOF
+				
+				${local_file} to ${irods_file}
+				EOF
+
+      # Calculate MD5 sum of local file in the background
+      lock "${lock_dir}/local_md5sum" \
+        local_md5sum "${local_file}" >"${tmp_md5sum}" 2>/dev/null &
+
+      if ! iput -fKT --wlock --retries 3 \
+                -X "${tmp_restart}" --lfrestart "${tmp_lfrestart}" \
+                "${local_file}" "${irods_file}" >/dev/null 2>&1; then
+        >&2 cat <<-EOF
+					* Could not upload file
+					* FAILED
+					EOF
+
+        failures=$(( failures++ ))
+        continue
+      fi
+
+      >&2 echo "* Uploaded ${local_size} bytes"
+
+      wait_on_lock "${lock_dir}/local_md5sum"
+
+      local_md5="$(<"${tmp_md5sum}")"
+      irods_md5="$(irods_checksum "${irods_file}")"
+
+      if [[ "${local_md5}" != "${irods_md5}" ]]; then
+        >&2 cat <<-EOF
+					* Checksum mismatch: Local ${local_md5}; iRODS ${irods_md5}
+					* FAILED
+					EOF
+
+        failures=$(( failures++ ))
+        continue
+      fi
+
+      duration=$(( $(now) - start ))
+      total_size=$(( total_size + local_size ))
+      >&2 cat <<-EOF
+				* Checksums verified (${local_md5})
+				* Completed in ${duration} seconds ($(rate "${local_size}" "${duration}"))
+				EOF
+    done < "${chunk_file}"
+
+    # Final output
+    local -i total_duration=$(( $(now) - total_start ))
+    >&2 cat <<-EOF
+			
+			Finished chunk, with ${failures} failures!
+			Uploaded and verified ${total_size} bytes in ${total_duration} seconds ($(rate "${total_size}" "${total_duration}"))
+			EOF
+
+    # If we have any failures, then the job should bail out
+    (( failures )) && exit 1
+  )
 }
 
 main() {
