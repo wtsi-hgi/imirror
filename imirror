@@ -128,10 +128,10 @@ prepare_from_mpistat() {
       fetch_mpistat_inodes d "${local_directory}" \
       | find_leaves \
       | swap_roots "${local_directory}" "${irods_collection}" \
-      | tee >(xargs -0I% echo imkdir -p % >/dev/null 2>&1)  # TODO Debug
+      | tee >(xargs -0I% imkdir -p "%" >/dev/null 2>&1)
     }
 
-    echo "Reading mpistat data from ${mpistat_file}..." >&2
+    >&2 echo "Reading mpistat data from ${mpistat_file}..."
 
     # The shuffle in here is to increase the probability of uniformly
     # sized chunks, in terms of total file size. Said probability tends
