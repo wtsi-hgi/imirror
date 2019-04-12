@@ -179,7 +179,15 @@ prepare_from_mpistat() {
   )
 }
 
+upload_chunk_to_irods() {
+  local chunk_file="$1"
+  local root_collection="$2"
+
+  false
+}
+
 main() {
+  # TODO Check for invalid arguments
   local mode="$1"
 
   if [[ "${mode:0:2}" == "__" ]]; then
@@ -233,8 +241,16 @@ main() {
   }
 
   __copy() {
-    # TODO imirror __copy IRODS_COLL
-    false
+    # imirror __copy IRODS_COLL
+    if [[ -z "${LSB_JOBINDEX+x}" ]] || [[ -z "${__IMIRROR_SUFFIX_LENGTH+x}" ]]; then
+      >&2 echo "Copy job incorrectly submitted!"
+      exit 1
+    fi
+
+    local irods_collection="$1"
+    local chunk_file="${CHUNK_DIR}/$(printf "%0${__IMIRROR_SUFFIX_LENGTH}d" "${LSB_JOBINDEX}")"
+
+    upload_chunk_to_irods "${chunk_file}" "${irods_collection}"
   }
 
   case "${mode}" in
@@ -243,6 +259,7 @@ main() {
       ;;
 
     *)
+      # TODO Better invalid argument output
       false
       ;;
   esac
