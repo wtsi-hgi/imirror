@@ -44,17 +44,6 @@ wait_on_lock() {
   done
 }
 
-strip_slash() {
-  # Strip the trailing slash from a string, if it exists
-  local path="$1"
-
-  if [[ "${path: -1}" == "/" ]]; then
-    path="${path:0:-1}"
-  fi
-
-  echo "${path}"
-}
-
 swap_roots() {
   # Replace the local directory root with the collection root
   local directory_root="$1"
@@ -67,8 +56,8 @@ prepare_from_mpistat() {
   # Parse the mpistat file to create the directory structure on iRODS
   # and the list of files, chunked, for the distributed copy submission
   local mpistat_file="$1"
-  local local_directory="$(strip_slash "$2")"
-  local irods_collection="$(strip_slash "$3")"
+  local local_directory="$2"
+  local irods_collection="$3"
 
   local -i file_count
   local -i chunk_size="${CHUNK_SIZE-10}"
@@ -351,9 +340,20 @@ main() {
     # imirror __prepare MPISTAT_FILE LOCAL_DIR IRODS_COLL
     # TODO This is currently just a trivial wrapper, but it can be
     # extended in the future to allow non-mpistat submissions
+    strip_slash() {
+      # Strip the trailing slash from a string, if it exists
+      local path="$1"
+
+      if [[ "${path: -1}" == "/" ]]; then
+        path="${path:0:-1}"
+      fi
+
+      echo "${path}"
+    }
+
     local mpistat_file="$1"
-    local local_directory="$2"
-    local irods_collection="$3"
+    local local_directory="$(strip_slash "$2")"
+    local irods_collection="$(strip_slash "$3")"
 
     prepare_from_mpistat "${mpistat_file}" "${local_directory}" "${irods_collection}"
   }
