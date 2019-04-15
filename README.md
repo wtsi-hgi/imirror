@@ -10,3 +10,4 @@
 * GNU sed (v4.2.2, or later)
 * jq <!-- VERSION? -->
 * iRODS icommands <!-- VERSION? -->
+* baton <!-- VERSION? -->
