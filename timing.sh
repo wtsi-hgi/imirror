@@ -122,3 +122,5 @@ split --lines $CHUNK_SIZE --separator="\0" --suffix-length $SUFFIX --numeric-suf
   shuffled_files "$TMP/"
 
 echo "2: Split into chunks in ${SECONDS} seconds; ${CHUNKS} chunks created"
+
+rm -rf "$TMP"
