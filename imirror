@@ -163,7 +163,7 @@ prepare_from_mpistat() {
       bsub -G "${GROUP}" -q "${COPY_Q-normal}" \
            -J "imirror${RANDOM}[1-${chunks}]%${iput_limit}" \
            -o "${LOG_DIR}/copy.%I.log" -e "${LOG_DIR}/copy.%I.log" \
-           -M 1000 -R "select[mem>1000] rusage[mem=1000]" \
+           -n 4 -M 1000 -R "span[hosts=1] select[mem>1000] rusage[mem=1000]" \
            "${BINARY}" __copy "${local_directory}" "${irods_collection}" \
       | grep -Po '(?<=Job <)\d+(?=>)'
     )"
@@ -251,7 +251,7 @@ upload_chunk_to_irods() {
       lock "${lock_dir}/local_md5sum" \
         local_md5sum "${local_file}" >"${tmp_md5sum}" 2>/dev/null &
 
-      if ! iput -fKT --wlock --retries 3 \
+      if ! iput -fKT --wlock --retries 3 -N 3 \
                 -X "${tmp_restart}" --lfrestart "${tmp_lfrestart}" \
                 "${local_file}" "${irods_file}" >/dev/null 2>&1; then
         >&2 cat <<-EOF
@@ -335,7 +335,7 @@ main() {
 
     job_id="$(bsub -G "${GROUP}" -q "${PREP_Q-normal}" \
                    -o "${LOG_DIR}/prep.log" -e "${LOG_DIR}/prep.log" \
-                   -M 5000 -R "select[mem>5000] rusage[mem=5000]" \
+                   -n 4 -M 5000 -R "span[hosts=1] select[mem>5000] rusage[mem=5000]" \
                    "${BINARY}" __prepare "${mpistat_file}" "${local_directory}" "${irods_collection}" \
               | grep -Po '(?<=Job <)\d+(?=>)')"
 
