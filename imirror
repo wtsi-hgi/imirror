@@ -97,54 +97,61 @@ prepare_from_mpistat() {
       | grep -zE "^${local_directory}(/|$)"
     }
 
-    mirror_directories() {
-      local local_directory="$1"
-      local irods_collection="$2"
+    find_leaves() {
+      # Get the leaf nodes of a directory hierarchy
+      sort -z \
+      | awk '
+        BEGIN { RS = ORS = "\0" }
 
-      find_leaves() {
-        # Get the leaf nodes of a directory hierarchy
-        sort -z \
-        | awk '
-          BEGIN { RS = ORS = "\0" }
+        $0 !~ "^" previous "/" { print previous }
+        { previous = $0 }
 
-          $0 !~ "^" previous "/" { print previous }
-          { previous = $0 }
-
-          END { print previous }
-        '
-      }
-
-      fetch_mpistat_inodes d "${local_directory}" \
-      | find_leaves \
-      | swap_roots "${local_directory}" "${irods_collection}" \
-      | tee >(xargs -0I% imkdir -p "%" >/dev/null 2>&1)
+        END { print previous }
+      '
     }
 
-    >&2 echo "Reading mpistat data from ${mpistat_file}..."
+    >&2 echo "Reading directories from mpistat data in ${mpistat_file}..."
 
-    # The shuffle in here is to increase the probability of uniformly
-    # sized chunks, in terms of total file size. Said probability tends
-    # to 1 as the number of the files in each chunk increases
     gunzip -c "${mpistat_file}" \
-    | tee >(lock "${lock_dir}/mirror_directories" \
-              mirror_directories "${local_directory}" "${irods_collection}" \
-              > "${temp_dir}/dirs") \
+    | fetch_mpistat_inodes d "${local_directory}" \
+    > "${temp_dir}/directories"
+
+    >&2 echo "Calculating leaf directories to mirror..."
+
+    find_leaves < "${temp_dir}/directories" \
+    | swap_roots "${local_directory}" "${irods_collection}" \
+    > "${temp_dir}/collections"
+
+    >&2 echo "Mirroring directory structure to ${irods_collection}..."
+
+    local collection_leaf
+    while IFS= read -rd '' collection_leaf; do
+      >&2 echo "* ${collection_leaf}"
+      imkdir -p "${collection_leaf}" >/dev/null 2>&1
+    done < "${temp_dir}/collections"
+
+    >&2 echo "Reading files from mpistat data in ${mpistat_file}..."
+
+    gunzip -c "${mpistat_file}" \
     | fetch_mpistat_inodes f "${local_directory}" \
-    | shuf -z \
     > "${temp_dir}/files"
 
-    wait_on_lock "${lock_dir}/mirror_directories"
+    >&2 echo "Shuffling files to upload..."
+    # The shuffle is to increase the probability of uniformly sized
+    # chunks, in terms of total file size. Said probability tends to 1
+    # as the number of the files in each chunk increases
+
+    shuf -z < "${temp_dir}/files" > "${temp_dir}/files.shuffled"
+
+    >&2 echo "Splitting files into chunks of ${chunk_size}..."
 
     file_count=$(grep -cF $'\0' "${temp_dir}/files")
     chunks=$(( (file_count / chunk_size) + (file_count % chunk_size != 0) ))
     chunk_suffix_length=${#chunks}
 
-    # We split here, rather than at the end of the parsing pipeline,
-    # because we need to know the total number of files upfront, so we
-    # can calculate the suffix length and set the copy job array size
     split --lines "${chunk_size}" --separator="\0" \
           --suffix-length "${chunk_suffix_length}" --numeric-suffixes=1 \
-          "${temp_dir}/files" "${CHUNK_DIR}/"
+          "${temp_dir}/files.shuffled" "${CHUNK_DIR}/"
 
     job_id="$(
       export __IMIRROR_SUFFIX_LENGTH="${chunk_suffix_length}"
@@ -324,7 +331,7 @@ main() {
 
     job_id="$(bsub -G "${GROUP}" -q "${PREP_Q-normal}" \
                    -o "${LOG_DIR}/prep.log" -e "${LOG_DIR}/prep.log" \
-                   -n 4 -M 5000 -R "span[hosts=1] select[mem>5000] rusage[mem=5000]" \
+                   -n 4 -M 500 -R "span[hosts=1] select[mem>500] rusage[mem=500]" \
                    "${BINARY}" __prepare "${mpistat_file}" "${local_directory}" "${irods_collection}" \
               | grep -Po '(?<=Job <)\d+(?=>)')"
 
