@@ -167,8 +167,6 @@ prepare_from_mpistat() {
     >&2 cat <<-EOF
 				
 				Mirrored structure of ${local_directory} into ${irods_collection}:
-				$(sed -z "s/^/* /" "${temp_dir}/dirs" | xargs -0n1)
-				
 				${file_count} files to upload, separated into ${chunks} chunks of up to ${chunk_size} files each
 				Copy job submitted as Job ${job_id}, throttled to ${iput_limit} concurrent uploads
 				EOF
