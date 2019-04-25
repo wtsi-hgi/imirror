@@ -294,7 +294,7 @@ upload_chunk_to_irods() {
 			EOF
 
     # If we have any failures, then the job should bail out
-    (( failures )) && exit 1
+    (( failures > 0 )) && exit 1
   )
 }
 
