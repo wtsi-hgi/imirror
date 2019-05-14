@@ -253,7 +253,7 @@ upload_chunk_to_irods() {
 					* FAILED
 					EOF
 
-        failures=$(( failures++ ))
+        failures+=1
         continue
       fi
 
@@ -270,7 +270,7 @@ upload_chunk_to_irods() {
 					* FAILED
 					EOF
 
-        failures=$(( failures++ ))
+        failures+=1
         continue
       fi
 
@@ -294,6 +294,7 @@ upload_chunk_to_irods() {
 			EOF
 
     # If we have any failures, then the job should bail out
+    # FIXME This doesn't do what I expect, for some reason...
     (( failures > 0 )) && exit 1
   )
 }
