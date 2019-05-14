@@ -214,7 +214,8 @@ upload_chunk_to_irods() {
 
     local temp_dir="$(mktemp -d)"
     local lock_dir="$(mktemp -d)"
-    trap 'rm -rf ${lock_dir} ${temp_dir}' EXIT
+    local iput_fail="${temp_dir}/iput_failures"
+    trap 'cat "${iput_fail}"; rm -rf "${lock_dir}" "${temp_dir}"' EXIT
 
     local local_file
     local -i local_size
@@ -226,12 +227,14 @@ upload_chunk_to_irods() {
     local tmp_md5sum
     local tmp_restart
     local tmp_lfrestart
+    local tmp_iputfail
     while IFS= read -rd '' local_file; do
       start="$(now)"
 
       tmp_md5sum="$(mktemp -p "${temp_dir}")"
       tmp_restart="$(mktemp -p "${temp_dir}")"
       tmp_lfrestart="$(mktemp -p "${temp_dir}")"
+      tmp_iputfail="$(mktemp -p "${temp_dir}")"
 
       irods_file="$(echo "${local_file}" | swap_roots "${local_directory}" "${irods_collection}")"
       local_size="$(stat -c "%s" "${local_file}")"
@@ -247,13 +250,15 @@ upload_chunk_to_irods() {
 
       if ! iput -fKT --wlock --retries 3 -N 3 \
                 -X "${tmp_restart}" --lfrestart "${tmp_lfrestart}" \
-                "${local_file}" "${irods_file}" >/dev/null 2>&1; then
+                "${local_file}" "${irods_file}" > "${tmp_iputfail}" 2>&1; then
         >&2 cat <<-EOF
 					* Could not upload file
 					* FAILED
 					EOF
 
         failures+=1
+        cat "${tmp_iputfail}" >> "${iput_fail}"
+
         continue
       fi
 
