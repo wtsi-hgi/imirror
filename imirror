@@ -259,8 +259,7 @@ upload_chunk_to_irods() {
 
         failures+=1
 
-        # Add iput failures to list, delimited by a ruled line
-        (
+        ( # Add iput failures to list, delimited by a ruled line
           echo "------------------------------------------------------------------------"
           cat "${tmp_iputfail}"
         ) >> "${iput_fail}"
@@ -306,7 +305,7 @@ upload_chunk_to_irods() {
 
     # If we have any failures, then the job should bail out
     # FIXME This doesn't do what I expect, for some reason...
-    (( failures > 0 )) && exit 1
+    (( ! failures ))
   )
 }
 
