@@ -250,6 +250,7 @@ upload_chunk_to_irods() {
 
       if ! iput -fKT --wlock --retries 3 -N 3 \
                 -X "${tmp_restart}" --lfrestart "${tmp_lfrestart}" \
+                --metadata "imirror_src;${local_file};;" \
                 "${local_file}" "${irods_file}" > "${tmp_iputfail}" 2>&1; then
         >&2 cat <<-EOF
 					* Could not upload file
