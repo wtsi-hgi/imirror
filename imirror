@@ -215,7 +215,7 @@ upload_chunk_to_irods() {
     local temp_dir="$(mktemp -d)"
     local lock_dir="$(mktemp -d)"
     local iput_fail="${temp_dir}/iput_failures"
-    trap 'cat "${iput_fail}"; rm -rf "${lock_dir}" "${temp_dir}"' EXIT
+    trap 'cat "${iput_fail}" 2>/dev/null; rm -rf "${lock_dir}" "${temp_dir}"' EXIT
 
     local local_file
     local -i local_size
