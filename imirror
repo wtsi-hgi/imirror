@@ -257,7 +257,12 @@ upload_chunk_to_irods() {
 					EOF
 
         failures+=1
-        cat "${tmp_iputfail}" >> "${iput_fail}"
+
+        # Add iput failures to list, delimited by a ruled line
+        (
+          echo "------------------------------------------------------------------------"
+          cat "${tmp_iputfail}"
+        ) >> "${iput_fail}"
 
         continue
       fi
