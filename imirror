@@ -79,8 +79,8 @@ prepare_from_mpistat() {
       local local_directory="$2"
 
       local common_prefix="$(printf "%s\n%s\n" \
-                               "$(echo -n "${local_directory}" | base64)" \
-                               "$(echo -n "${local_directory}/" | base64)" \
+                               "$(echo -n "${local_directory}" | base64 -w0)" \
+                               "$(echo -n "${local_directory}/" | base64 -w0)" \
                              | sed -e 'N;s/^\(.*\).*\n\1.*$/\1/')"
 
       awk -v PREFIX="${common_prefix}" -v MODE="${file_mode}" '
