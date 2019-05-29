@@ -192,7 +192,7 @@ upload_chunk_to_irods() {
 
   local_md5sum() {
     local filename="$1"
-    md5sum "${filename}" | cut -c-32
+    md5sum "${filename}" | grep -Eo "[[:xdigit:]]{32}"
   }
 
   irods_checksum_size() {
