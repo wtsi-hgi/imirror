@@ -195,14 +195,14 @@ upload_chunk_to_irods() {
     md5sum "${filename}" | cut -c-32
   }
 
-  irods_checksum() {
+  irods_checksum_size() {
     local fq_path="$1"
     local collection="$(dirname "${fq_path}")"
     local dataobject="$(basename "${fq_path}")"
 
     baton -c "${collection}" -d "${dataobject}" \
-    | baton-list --checksum \
-    | jq -r .checksum
+    | baton-list --checksum --size \
+    | jq -r '.checksum + "/" + (.size | tostring)'
   }
 
   (
@@ -219,9 +219,9 @@ upload_chunk_to_irods() {
 
     local local_file
     local -i local_size
-    local local_md5
+    local local_md5_size
     local irods_file
-    local irods_md5
+    local irods_md5_size
     local -i start
     local -i duration
     local tmp_md5sum
@@ -271,12 +271,12 @@ upload_chunk_to_irods() {
 
       wait_on_lock "${lock_dir}/local_md5sum"
 
-      local_md5="$(<"${tmp_md5sum}")"
-      irods_md5="$(irods_checksum "${irods_file}")"
+      local_md5_size="$(<"${tmp_md5sum}")/${local_size}"
+      irods_md5_size="$(irods_checksum_size "${irods_file}")"
 
-      if [[ "${local_md5}" != "${irods_md5}" ]]; then
+      if [[ "${local_md5_size}" != "${irods_md5_size}" ]]; then
         >&2 cat <<-EOF
-					* Checksum mismatch: Local ${local_md5}; iRODS ${irods_md5}
+					* Checksum/size mismatch: Local ${local_md5_size}; iRODS ${irods_md5_size}
 					* FAILED
 					EOF
 
@@ -290,7 +290,7 @@ upload_chunk_to_irods() {
       duration=$(( $(now) - start ))
       total_size=$(( total_size + local_size ))
       >&2 cat <<-EOF
-				* Checksums verified (${local_md5})
+				* Checksums and sizes verified (${local_md5_size})
 				* Completed in ${duration} seconds ($(rate "${local_size}" "${duration}"))
 				EOF
     done < "${chunk_file}"
