@@ -87,7 +87,7 @@ prepare_from_mpistat() {
         BEGIN { FS = OFS = "\t" }
 
         # Find files of MODE whose base64 encoding have the correct prefix
-        $8 == MODE && $1 ~ "^" PREFIX {
+        $8 == MODE && $2 != 0 && $1 ~ "^" PREFIX {
           # n.b., "AA==" is the base64 encoding of \0, so we can stream
           # base64 decoding efficiently, with NULL-delimited output
           print $1 "AA=="
