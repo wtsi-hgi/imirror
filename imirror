@@ -248,7 +248,7 @@ upload_chunk_to_irods() {
       lock "${lock_dir}/local_md5sum" \
         local_md5sum "${local_file}" >"${tmp_md5sum}" 2>/dev/null &
 
-      if ! iput -fKT --wlock --retries 3 -N 3 \
+      if ! iput -fKT --retries 3 -N 3 \
                 -X "${tmp_restart}" --lfrestart "${tmp_lfrestart}" \
                 --metadata "imirror_src;${local_file};;" \
                 "${local_file}" "${irods_file}" > "${tmp_iputfail}" 2>&1; then
